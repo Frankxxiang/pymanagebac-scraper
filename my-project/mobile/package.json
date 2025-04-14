@@ -1,0 +1,13 @@
+{
+  "name": "mobile",
+  "version": "1.0.0",
+  "description": "项目移动端",
+  "main": "index.js",
+  "scripts": {
+    "android": "react-native run-android",
+    "ios": "react-native run-ios"
+  },
+  "dependencies": {
+    "react-native": "^0.64.0"
+  }
+}

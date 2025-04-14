@@ -1,0 +1,10 @@
+LICENCE
+README.md
+setup.py
+pymanagebac.egg-info/PKG-INFO
+pymanagebac.egg-info/SOURCES.txt
+pymanagebac.egg-info/dependency_links.txt
+pymanagebac.egg-info/requires.txt
+pymanagebac.egg-info/top_level.txt
+src/__init__.py
+src/pymanagebac.py

@@ -19,9 +19,19 @@ class classe:
         """
 
         self.class_id = class_id
-        self.name = name
         self.grades = grade
+        self.name = name
+    
+class a_overgrade:
+    def __init__(self, name: str, number: str):
+        """_summary_
 
+        Args:
+            number (str): 分数
+            name (str): 名称（overall，subaspects）
+        """
+        self.number = number
+        self.name = name
 
 class a_grade:
     def __init__(self, number: str, max_number: str, name: str):
@@ -48,8 +58,7 @@ class a_task:
 
 
 class pymanagebac:
-
-    def __init__(self, mail: str, password: str, impl_wait=5., hide_window=True, subdomain="" , logging_level=None):
+    def __init__(self, mail: str, password: str, impl_wait=5., hide_window=False, subdomain="" , logging_level=None):
 
         def get_subdomain(mail2):
             to_ret = []
@@ -86,322 +95,220 @@ class pymanagebac:
         self.session_cookie = None
 
     def login(self):
-        # login
-        self.driver.get(f"https://{self.subdomain}.managebac.com/login")
-        email_box = self.driver.find_element(By.ID, "session_login")
-        email_box.send_keys(self.mail)
-        password_box = self.driver.find_element(By.ID, "session_password")
-        password_box.send_keys(self.password)
-        submit_button = self.driver.find_element(By.NAME, "commit")
+        """
+        Login to the student site
+        Returns:
 
-        login_button = ActionChains(driver=self.driver)
-        login_button.click(on_element=submit_button)
-        login_button.perform()
-        # sometimes it'll fail so we wait a little bit
-        sleep(1)
-
-        # use session cookies for increased speed
-        cookie = self.driver.get_cookie(name="_managebac_session")
-        cookie = {"_managebac_session": cookie.get("value"), "hide_osc_announcement_modal": "true"}
-        result = req.get(f"https://{self.subdomain}.managebac.com/student/", cookies=cookie)
-
-        if str(result) == "<Response [200]>":
-            self.session_cookie = cookie
-        else:
-            print("[DEBUG] couldn't get session cookie for some reason... [CONTINUING]")
+        """
+        self.driver.get(f"https://{self.subdomain}.managebac.cn/student")
+        self.driver.find_element(By.ID, "session_login").send_keys(self.mail)
+        self.driver.find_element(By.ID, "session_password").send_keys(self.password)
+        self.driver.find_element(By.NAME, "commit").click()
 
     def get_schedule(self):
-        more_button = self.driver.find_elements(By.CLASS_NAME, "fc-more")
+        """
+        Get the schedule of the day
+        Returns: list of classes that you have that day.
 
-        # TODO need to test this
-        if more_button:
-            fc_more = ActionChains(driver=self.driver)
-            fc_more.click(on_element=more_button)
-            fc_more.perform()
+        """
+        self.driver.get(f"https://{self.subdomain}.managebac.cn/student/calendar")
+        sleep(1)
+    # 直接查找所有的mb-event__text元素
+        event_texts = self.driver.find_elements(By.CLASS_NAME, "mb-event__text")
 
-        days = self.driver.find_elements(By.CLASS_NAME, "day")
+        for event_text in event_texts:
+            # 获取元素内的文本，这会包含时间和作业内容
+            info = event_text.text
+            date_element = event_text.find_element(By.XPATH, "ancestor::td[@data-date]")
+            date_value = date_element.get_attribute("data-date")
+            print(f"日期是: {date_value}")  # 应该输出 2025-04-03
+    
+            # 如果需要分别获取时间和作业内容
+            # 时间在<strong>标签内
+            try:
+                due_time = event_text.find_element(By.TAG_NAME, "strong").text
+                # 作业内容在<div>标签内
+                assignment_content = event_text.find_element(By.TAG_NAME, "div").text
+        
+                print(f"截止时间: {due_time}, 作业内容: {assignment_content}")
+            except:
+                print(f"完整信息: {info}")
+#        elements = self.driver.find_elements(By.CLASS_NAME, "fc-time-grid-event.fc-v-event.fc-event.fc-start.fc-end."
+        eventbuttons= self.driver.find_element(By.CLASS_NAME, "fi fi-info mb-event__hint-icon")
+        # fc-event
 
-        temp = []
+        ret_list = []
+        my_text = ""
+        for i in eventbuttons:
+            ActionChains(self.driver).move_to_element(i).perform()
+            my_text = i.get_attribute("title")
+            ret_list.append(my_text)
 
-        # put raw information in list
-        for day in days:
-            text = re.split("\n", day.text, flags=re.DOTALL)
-            temp.append(text)
-
-        all_days = temp
-        temp = []
-
-        # sort the raw information by date and remove empty dates
-        for day in all_days:
-            if len(day) == 1:
-                continue
-            temp.append(day)
-
-        all_days = temp
-
-        return all_days
+        return ret_list
 
     def get_classes(self, target=1):
-        # TODO half broken
-        self.driver.get(f"https://{self.subdomain}.managebac.com/student/classes/my?page={target}")
-        sleep(0.2)
-        source = self.driver.page_source
+        """
+        Get all the classes that the user has
+        Args:
+            target: 1 academic, 0 diploma (not used in current implementation)
 
-        if "No classes found" in source:
-            return []
+        Returns:
+            a list of objects of classes
+        """
+        # 使用新的URL直接访问课程页面
+        self.driver.get(f"https://{self.subdomain}.managebac.cn/student/classes/my")
+        sleep(1)  # 等待页面加载
+        
+        # 使用页面内容找到所有课程卡片
+        page_source = self.driver.page_source
+        soup = bs4.BeautifulSoup(page_source, features="html.parser")
+        
+        # 查找所有课程卡片元素 - 基于提供的开发者工具截图
+        class_cards = soup.find_all("div", class_="fusion-card-item fusion-card-item-collapse ib-class-component")
+        
+        to_ret = []
+        for card in class_cards:
+            # 使用卡片的id属性提取课程ID
+            class_id = 0
+            if 'id' in card.attrs:
+                id_value = card.attrs['id']
+                if id_value.startswith('ib_class_'):
+                    class_id = int(id_value.replace('ib_class_', ''))
+            
+            # 尝试从卡片中找到课程名称 - 使用类似您XPath路径的查找方式
+            class_name = "Unknown Class"
+            name_element = card.find("h4")
+            if name_element and name_element.find("span") and name_element.find("span").find("a"):
+                class_name = name_element.find("span").find("a").text.strip()
+            
+            if class_id > 0:
+                to_ret.append(classe(class_id, class_name, []))
+                print(f"Found class: {class_name} ({class_id})")
+        
+        # 如果上面的方法没有找到任何课程，尝试使用XPath
+        if not to_ret:
+            try:
+                # 使用提供的XPath路径
+                xpath = "/html/body/main/div[2]/div[2]/div[4]/div[1]/div[1]/div[1]/h4/span/a"
+                elements = self.driver.find_elements(By.XPATH, xpath)
+                
+                for element in elements:
+                    href = element.get_attribute("href")
+                    class_name = element.text.strip()
+                    
+                    # 从href中提取课程ID
+                    if href and "/student/classes/" in href:
+                        class_id = int(href.split("/")[-1])
+                        to_ret.append(classe(class_id, class_name, []))
+            except Exception as e:
+                print(f"Error using XPath: {e}")
+        
+        return to_ret
+    
+    def get_overallgrades(self, target: classe):
+        """
+        Get the overall grades for a specific class
+        Args:
+            target: the class that we want to look the grades for
+        """
+        grades = []#里面每个元素都是a_overallgrade类，其中第一个元素是overallscore，其他的是分别的子score
+        self.driver.get(f"https://{self.subdomain}.managebac.cn/student/classes/{target.class_id}/core_tasks")
+        soup = bs4.BeautifulSoup(self.driver.page_source, features="html.parser")
+        grades_list = soup.find("div", class_="sidebar-items-list")#所有成绩的列表，那一栏，父div
+        grades_div_first = grades_list.find_all("div", class_="list-item")[1]
+        cells = grades_div_first.find_all("div", class_="cell")#第一个成绩的cell(overallscore)
+        grade_name = cells[0].find("strong").text.strip()  # 第一个 cell 包含名称
+        grade_score = cells[1].text.strip()  # 第二个 cell 包含分数
+        grades.append(a_overgrade(grade_name, grade_score))
+        grades_div = grades_list.find_all("div", class_="list-item")[2:]#那一栏的每个成绩，子div
+        for grade in grades_div:
+            cells = grade.find_all("div", class_="cell")
+            grade_name = cells[0].find("div", class_="label").text.strip()  # 从 label 类中获取名称
+            
+            if len(cells) > 1:  # 确保有第二个cell
+                score_cell = cells[1]
+                # 检查是否有strong标签
+                if score_cell.find('strong'):
+                    grade_score = f"{score_cell.find('strong').text.strip()} {score_cell.text.strip().strip('() ')}"
+                else:
+                    grade_score = score_cell.text.strip() if score_cell.text.strip() else "暂无成绩"
+            else:
+                grade_score = "暂无成绩"
+            
+            grades.append(a_overgrade(grade_name, grade_score))
+        target.grades = grades
+        return target
 
-        # print("[DEBUG] now using bs4")
-
-        soup = bs4.BeautifulSoup(source, "html.parser")
-        html_classes = soup.find("div", {"id": "classes"})
-        h_classes = html_classes.find_all("div",
-                                          {"class": "fusion-card-item fusion-card-item-collapse ib-class-component"})
-
-        # print("[DEBUG] now using own implementation")
-
-        temp1 = []
-        temp_t = []
-
-        # get the name out of the html
-        for i in h_classes:
-            temp = i.text.split(sep="\n")
-            for a in temp:
-                if a != "":
-                    if not len(a) in [1, 2]:
-                        # filter some strings out of a
-                        if a not in ["Units", "Tasks", "Updates", "Unit", "Task", "Update"]:
-                            temp_t.append(a)
-
-        # get the ID of the html
-        for line in str(h_classes).splitlines():
-            if " id=" in line:
-                for i in line.split():
-                    if "id=" in i:
-                        for a in i.split(sep="\""):
-                            if "ib" in a:
-                                for b in a.split(sep="_"):
-                                    if any([x in b for x in "1234567890"]):
-                                        temp1.append(b)
-
-        temp5 = []
-        count = target + 1
-        # print(len(temp_t))
-        # print(len(temp1))
-
-        for i in range(0, (len(temp1))):
-            item = classe(class_id=int(temp1[i]), name=temp_t[i], grade=[])
-            temp5.append(item)
-
-        # check if there is a second page (or more)
-        self.driver.get(f"https://{self.subdomain}.managebac.com/student/classes/my?page={count}")
-        sleep(0.2)
-        source = self.driver.page_source
-        if "No classes found" not in source:
-            temp = self.get_classes(target=count)
-            for i in temp:
-                temp5.append(i)
-
-        return temp5
 
     def get_grades(self, target: classe, term: int = 0):
+        """
+        Get the grades for a specific class
+        Args:
+            target: the class that we want to look the grades for
+            term: the term that is getting scraped
 
-        self.driver.get(f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks")
-        sleep(0.1)
-        if term:
-            url = self.driver.current_url
-            url_id = int(url.split(sep="=")[-1])
-            current_month = datetime.now().month
-            if term == 1:
-                if 1 <= current_month <= 4:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id-1}")
-                    sleep(0.1)
-                elif current_month >= 9:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id}")
-                    sleep(0.1)
-                else:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id-2}")
-                    sleep(0.1)
-            elif term == 2:
-                if 1 <= current_month <= 4:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id - 0}")
-                    sleep(0.1)
-                elif current_month >= 9:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id + 1}")
-                    sleep(0.1)
-                else:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id - 1}")
-                    sleep(0.1)
-            elif term == 3:
-                if 1 <= current_month <= 4:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id + 1}")
-                    sleep(0.1)
-                elif current_month >= 9:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id + 2}")
-                    sleep(0.1)
-                else:
-                    self.driver.get(
-                        f"https://{self.subdomain}.managebac.com/student/classes/{target.class_id}/core_tasks?term={url_id - 0}")
-                    sleep(0.1)
-            else:
-                raise TypeError("the argument term must be 1, 2, 3 or 4")
-        source = self.driver.page_source
+        Returns:
+            a list of a_grade objects, also changes the a_grade member of the classe to the classes that it found
+        """
+        self.driver.get(f"https://{self.subdomain}.managebac.cn/student/classes/{target.class_id}/core_tasks")
 
-        # print("[DEBUG] now using own implementation")
+        # # getting the name of the page. that's also the class name
+        # soup = bs4.BeautifulSoup(self.driver.page_source, features="html.parser")
+        # name = soup.select("div h2")[0]
+        # name = name.contents[0].strip()
+        # target.name = name
 
-        temp_names = []
-        temp_grades = []
-        temp_max_grades = []
+        # 选择学期
+        # terms_list = self.driver.find_element(By.ID, "current-term-grades-select")
+        # terms = terms_list.find_element(By.TAG_NAME, "optgroup").find_elements(By.TAG_NAME, "option")
+        # if term != 0:
+        #     terms[term].click()
+        # else:
+        #     # get the last term
+        #     terms[-1].click()
 
-        criterion = False
+        soup = bs4.BeautifulSoup(self.driver.page_source, features="html.parser")
+        grades = []
+        tasks = soup.find_all("table", attrs={"class": "table table-hover table-striped student-term-report-table"})[0]\
+            .find("tbody")
 
-        source = source.splitlines()
-        for item in source:
-            # get the name out of the task
-            if f"href=\"/student/classes/{target.class_id}/core_tasks" in item:
-                if "<div class=\"indicator program-label m" in item:
-                    continue
-                parts = item.split(sep=">")
-                parts.pop(0)
-                parts.pop(-1)
-                temp_names.append(parts[0][:-3])
+        tasks_all = tasks.find_all("tr")
+        for task in tasks_all:
+            attr1 = task.find_all("td", attrs={"class": "term-grade-task-name"})[0]
+            title = attr1.a.text.replace("\t", "").replace("\n", "")
+            try:
+                grade_html = task.find_all("td", attrs={"class": "term-grade-max-score"})
+                grade = task.find_all("td", attrs={"class": "term-grade-score"})
 
-            # get the grade out of the task
-            if "<div class=\"label label-score\">" in item:
-                parts = item.split(sep=">")
-                parts.pop(0)
-                parts.pop(-1)
-                temp_grades.append(parts[0][:-5])
+                if len(grade_html) and len(grade):
+                    max_grade = grade_html[0].text.replace("\t", "").replace("\n", "").replace(" ", "")
+                    grade = grade[0].text.replace("\t", "").replace("\n", "").replace(" ", "")
 
-            # get the max_grade out of the task
-            if "<div class=\"label label-points\">" in item:
-                parts = item.split(sep=">")
-                parts.pop(0)
-                parts.pop(-1)
-                temp_max_grades.append(parts[0][:-5])
+                    # sometimes the teacher, will not use the myp grading system.
+                    # when the teacher do this the grades dont have the MYP format
+                    if title.strip() != "":
+                        criteria_html = task.find_all("td", attrs={"class": "term-grade-criterias"})
+                        if len(criteria_html):
+                            criteria = criteria_html[0].find_all("div", attrs={"class": "progress-bar-flex-group"})
+                            if len(criteria):
+                                to_ret = {}
+                                for i in criteria:
+                                    to_ret[i.find("strong").text] = i.find("span").text.replace(" ", "")
+                                grades.append(a_grade(to_ret, max_grade, title))
+                                continue
 
-            # if the grade is N/A
-            if "<div class=\"label label-not-applicable\">" in item:
-                parts = item.split(sep=">")
-                parts.pop(0)
-                parts.pop(-1)
-                temp = (parts[0][:-5])
+                        grades.append(a_grade(grade, max_grade, title))
+            except:
+                pass
 
-                temp_max_grades.append(temp)
-                temp_grades.append(temp)
-
-            # check if grade has criterion (basically always)
-            if "<div class=\"cell criterion-grade\">" in item or criterion:
-                if not criterion:
-                    criterion = True
-                    continue
-                criterion = False
-                part = item[:-1]
-                # print(temp_grades)
-
-                temp_grades.append(part)
-                temp_max_grades.append(part)
-
-        # print("[DEBUG] done getting all the grades using my own implementation!")
-        # print("[DEBUG] now fixing potential errors...")
-
-        # print(temp_grades)
-        # print(temp_max_grades)
-
-        new_grades = []
-        new_max_grades = []
-        count = 0
-        value = "number"
-
-        # print(temp_max_grades)
-
-        # fix the list
-        for item in temp_grades:
-            if item in "ABCD":
-                key = item
-                value = temp_grades[count + 1]
-                to_insert = {key: value}
-                try:
-                    # print(new_grades)
-                    if isinstance(new_grades[-1], dict):
-
-                        new_grades[-1].update(to_insert)
-
-                    else:
-                        new_grades.append(to_insert)
-                except IndexError:  # assume that the first entry is a criterion
-                    new_grades.append(to_insert)
-
-                count += 1
-                continue
-
-            if item == value:
-                count += 1
-                continue
-
-            new_grades.append(item)
-            count += 1
-
-        count = 0
-
-        # OPTIMIZATION NEEDED
-        for item in temp_max_grades:
-            if item in "ABCD":
-                key = item
-                value = temp_max_grades[count + 1]
-                to_insert = {key: value}
-                try:
-                    if isinstance(new_max_grades[-1], dict):
-                        new_max_grades[-1].update(to_insert)
-                    else:
-                        new_max_grades.append(to_insert)
-                except IndexError:
-                    new_max_grades.append(to_insert)
-
-                count += 1
-                continue
-
-            if item == value:
-                count += 1
-                continue
-
-            new_max_grades.append(item)
-            count += 1
-
-        temp_grade_obj = []
-
-        # count = 0
-
-        # print(len(temp_grades))
-        # print(len(temp_max_grades))
-        # print(len(temp_names))
-
-        # print("\n\n\n\n\n\n")
-
-        # print(new_grades)
-        # print(new_max_grades)
-        # print(temp_names)
-
-        # print("[DEBUG] Fixed potential errors!")
-
-        for i in range(0, len(new_grades)):
-            # print(i)
-            grade_item = a_grade(number=new_grades[i], max_number=new_max_grades[i], name=temp_names[i])
-            temp_grade_obj.append(grade_item)
-        item = classe(class_id=target.class_id, name=target.name, grade=temp_grade_obj)
-
-        # print("[DEBUG] Ready to return!")
-
-        return item
+        target.grades = grades
+        return target
 
     def quit(self):
+        """
+        End the session
+        Returns:
+        """
         self.driver.quit()
 
 

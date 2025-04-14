@@ -1,0 +1,23 @@
+Metadata-Version: 2.1
+Name: pymanagebac
+Version: 0.0.3
+Summary: A python module for interacting with Managebac using selenium.
+Home-page: https://github.com/supermikea/pymanagebac
+Author: Mike Wiegman Avila
+Author-email: mike12wiegman@gmail.com
+License: gplv3
+Keywords: managebac,selenium,api,scraping
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+License-File: LICENCE
+
+
+pymanagebac is a python module for interacting with Managebac using selenium.
+
+this is a scraper that you can login using your student credentials.
+you can get your soon tasks from the managebac website.
+you can get your grades from the managebac website.
+
+this module is made by a student for students.
+please if something is not working contact me! and provide the issue with the full error message.
